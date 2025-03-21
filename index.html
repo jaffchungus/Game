@@ -1,445 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Epic Platformer Quest</title>
-    <style>
-        /* Enhanced styling with animations [[7]] */
-        body { 
-            margin: 0; 
-            padding: 0; 
-            overflow: hidden; 
-            background: #0a0a0a; 
-            color: #fff; 
-            font-family: 'Press Start 2P', cursive;
-        }
-        
-        #game-container {
-            position: relative;
-            width: 960px;
-            height: 640px;
-            margin: 0 auto;
-            background: #1a1a1a;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        
-        .block {
-            position: absolute;
-            background: #4a4a4a;
-            transition: transform 0.2s; /* Smooth movement [[7]] */
-        }
-        
-        .player {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background: #00ff00;
-            border-radius: 50%;
-            animation: pulse 1s infinite;
-        }
-        
-        .enemy {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            background: #ff0000;
-            border-radius: 50%;
-            animation: enemy-glow 1s infinite;
-        }
-        
-        .coin {
-            position: absolute;
-            width: 25px;
-            height: 25px;
-            background: #ffff00;
-            border-radius: 50%;
-            animation: spin 2s linear infinite;
-        }
-        
-        .powerup {
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            background: #ff00ff;
-            border-radius: 50%;
-            animation: float 1.5s ease-in-out infinite;
-        }
-        
-        .hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            font-size: 24px;
-            text-shadow: 2px 2px #000;
-        }
-        
-        .game-over {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 48px;
-            text-align: center;
-            display: none;
-            text-shadow: 3px 3px #ff0000;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        @keyframes enemy-glow {
-            0%, 100% { box-shadow: 0 0 10px #ff0000; }
-            50% { box-shadow: 0 0 20px #ff0000; }
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong Game</title>
 </head>
 <body>
-    <div id="game-container">
-        <div class="hud" id="hud">Score: 0 | Lives: 3 | Level: 1</div>
-        <div class="game-over" id="gameOver">
-            <div>GAME OVER</div>
-            <div>Press R to Restart</div>
-            <div>Press M for Main Menu</div>
-        </div>
-    </div>
-
+    <canvas id="canvas" width="800" height="600"></canvas>
     <script>
-        // Game configuration [[6]]
-        const config = {
-            gravity: 0.6,
-            moveSpeed: 6,
-            jumpPower: -14,
-            maxLevels: 5,
-            powerupDuration: 10000
-        };
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const paddleLeft = { x: 50, y: 250, width: 20, height: 100, speed: 300 };
+        const paddleRight = { x: 730, y: 250, width: 20, height: 100, speed: 300 };
+        const ball = { x: 400, y: 300, radius: 10, velocityX: 0, velocityY: 0 };
+        let player1Score = 0;
+        let player2Score = 0;
+        let gameState = 'start';
+        let countdown = 0;
+        let lastScorer = 'player1';
+        const keysPressed = { w: false, s: false, ArrowUp: false, ArrowDown: false };
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Game state
-        const state = {
-            player: {
-                x: 50,
-                y: 500,
-                width: 50,
-                height: 50,
-                velY: 0,
-                onGround: false,
-                canJump: true,
-                powerup: null,
-                powerupExpires: 0
-            },
-            keys: {},
-            score: 0,
-            lives: 3,
-            level: 1,
-            gameOver: false,
-            platforms: [],
-            enemies: [],
-            coins: [],
-            powerups: []
-        };
-
-        // DOM elements
-        const container = document.getElementById('game-container');
-        const hud = document.getElementById('hud');
-        const gameOverScreen = document.getElementById('gameOver');
-
-        // Initialize level 1 [[6]]
-        function initLevel1() {
-            state.platforms = [
-                { x: 0, y: 600, width: 960, height: 40 },
-                { x: 200, y: 500, width: 150, height: 20 },
-                { x: 450, y: 400, width: 200, height: 20 },
-                { x: 700, y: 300, width: 100, height: 20 }
-            ];
-            
-            state.enemies = [
-                { x: 300, y: 560, width: 40, height: 40, direction: 1, speed: 3 },
-                { x: 600, y: 260, width: 40, height: 40, direction: -1, speed: 2 }
-            ];
-            
-            state.coins = [
-                { x: 250, y: 460, collected: false },
-                { x: 500, y: 360, collected: false },
-                { x: 750, y: 260, collected: false }
-            ];
-            
-            state.powerups = [
-                { x: 850, y: 260, type: 'speed', collected: false }
-            ];
-        }
-
-        // Initialize level 2
-        function initLevel2() {
-            state.platforms = [
-                { x: 0, y: 600, width: 960, height: 40 },
-                { x: 100, y: 500, width: 200, height: 20 },
-                { x: 400, y: 400, width: 100, height: 20 },
-                { x: 600, y: 300, width: 300, height: 20 }
-            ];
-            
-            state.enemies = [
-                { x: 200, y: 460, width: 40, height: 40, direction: 1, speed: 4 },
-                { x: 700, y: 260, width: 40, height: 40, direction: -1, speed: 3 }
-            ];
-            
-            state.coins = [
-                { x: 150, y: 460, collected: false },
-                { x: 450, y: 360, collected: false },
-                { x: 800, y: 260, collected: false }
-            ];
-            
-            state.powerups = [
-                { x: 850, y: 260, type: 'shield', collected: false }
-            ];
-        }
-
-        // Add more level initialization functions here...
-
-        // Game loop [[6]]
-        function update() {
-            if (state.gameOver) return;
-
-            // Movement
-            if (state.keys['ArrowRight']) state.player.x += config.moveSpeed;
-            if (state.keys['ArrowLeft']) state.player.x -= config.moveSpeed;
-
-            // Gravity
-            state.player.velY += config.gravity;
-            state.player.y += state.player.velY;
-            state.player.onGround = false;
-
-            // Platform collision
-            state.platforms.forEach(platform => {
-                if (collisionCheck(state.player, platform)) {
-                    if (state.player.velY > 0 && state.player.y < platform.y) {
-                        state.player.y = platform.y - state.player.height;
-                        state.player.velY = 0;
-                        state.player.onGround = true;
-                        state.player.canJump = true;
-                    }
-                }
-            });
-
-            // Jumping
-            if (state.keys['Space'] && state.player.canJump && state.player.onGround) {
-                state.player.velY = config.jumpPower;
-                state.player.canJump = false;
-            }
-
-            // Enemy AI and collision
-            state.enemies.forEach(enemy => {
-                enemy.x += enemy.speed * enemy.direction;
-
-                // Reverse direction at platform edges
-                if (enemy.x + enemy.width > container.offsetWidth || enemy.x < 0) {
-                    enemy.direction *= -1;
-                }
-
-                if (collisionCheck(state.player, enemy)) {
-                    if (state.player.powerup === 'shield') {
-                        state.player.powerup = null;
-                        state.player.powerupExpires = 0;
-                    } else {
-                        state.lives--;
-                        resetPlayer();
-                    }
-                }
-            });
-
-            // Coin collection
-            state.coins.forEach(coin => {
-                if (!coin.collected && collisionCheck(state.player, coin)) {
-                    coin.collected = true;
-                    state.score += 100;
-                }
-            });
-
-            // Powerup collection
-            state.powerups.forEach(powerup => {
-                if (!powerup.collected && collisionCheck(state.player, powerup)) {
-                    powerup.collected = true;
-                    activatePowerup(powerup.type);
-                }
-            });
-
-            // Screen boundaries
-            if (state.player.x < 0) state.player.x = 0;
-            if (state.player.x + state.player.width > container.offsetWidth) {
-                state.player.x = container.offsetWidth - state.player.width;
-            }
-
-            // Level progression
-            if (state.coins.every(c => c.collected)) {
-                state.level++;
-                if (state.level > config.maxLevels) {
-                    winGame();
-                } else {
-                    initLevel();
-                }
-            }
-
-            // Powerup expiration
-            if (state.player.powerup && Date.now() > state.player.powerupExpires) {
-                state.player.powerup = null;
-            }
-
-            // Update HUD
-            hud.textContent = `Score: ${state.score} | Lives: ${state.lives} | Level: ${state.level}`;
-
-            // Game over check
-            if (state.lives <= 0) {
-                endGame();
-            }
-        }
-
-        // Collision detection [[6]]
-        function collisionCheck(obj1, obj2) {
-            return obj1.x < obj2.x + obj2.width &&
-                   obj1.x + obj1.width > obj2.x &&
-                   obj1.y < obj2.y + obj2.height &&
-                   obj1.y + obj1.height > obj2.y;
-        }
-
-        // Draw game elements [[7]]
-        function draw() {
-            container.innerHTML = `<div class="hud">${hud.textContent}</div>`;
-            
-            // Draw platforms
-            state.platforms.forEach(platform => {
-                const div = document.createElement('div');
-                div.className = 'block';
-                div.style.left = platform.x + 'px';
-                div.style.top = platform.y + 'px';
-                div.style.width = platform.width + 'px';
-                div.style.height = platform.height + 'px';
-                container.appendChild(div);
-            });
-
-            // Draw player
-            const playerDiv = document.createElement('div');
-            playerDiv.className = 'player';
-            playerDiv.style.left = state.player.x + 'px';
-            playerDiv.style.top = state.player.y + 'px';
-            container.appendChild(playerDiv);
-
-            // Draw enemies
-            state.enemies.forEach(enemy => {
-                const enemyDiv = document.createElement('div');
-                enemyDiv.className = 'enemy';
-                enemyDiv.style.left = enemy.x + 'px';
-                enemyDiv.style.top = enemy.y + 'px';
-                container.appendChild(enemyDiv);
-            });
-
-            // Draw coins
-            state.coins.forEach(coin => {
-                if (!coin.collected) {
-                    const coinDiv = document.createElement('div');
-                    coinDiv.className = 'coin';
-                    coinDiv.style.left = coin.x + 'px';
-                    coinDiv.style.top = coin.y + 'px';
-                    container.appendChild(coinDiv);
-                }
-            });
-
-            // Draw powerups
-            state.powerups.forEach(powerup => {
-                if (!powerup.collected) {
-                    const powerupDiv = document.createElement('div');
-                    powerupDiv.className = 'powerup';
-                    powerupDiv.style.left = powerup.x + 'px';
-                    powerupDiv.style.top = powerup.y + 'px';
-                    container.appendChild(powerupDiv);
-                }
-            });
-        }
-
-        // Powerup activation [[7]]
-        function activatePowerup(type) {
-            switch(type) {
-                case 'speed':
-                    config.moveSpeed = 10;
-                    setTimeout(() => config.moveSpeed = 6, config.powerupDuration);
-                    break;
-                case 'shield':
-                    state.player.powerup = 'shield';
-                    state.player.powerupExpires = Date.now() + config.powerupDuration;
-                    break;
-                case 'doublejump':
-                    state.player.canJump = true;
-                    break;
-            }
-        }
-
-        // Reset player position
-        function resetPlayer() {
-            state.player.x = 50;
-            state.player.y = 500;
-            state.player.velY = 0;
-        }
-
-        // Game over sequence
-        function endGame() {
-            state.gameOver = true;
-            gameOverScreen.style.display = 'block';
-        }
-
-        // Win game sequence
-        function winGame() {
-            alert('You beat the game!');
-            endGame();
-        }
-
-        // Restart game
-        function restartGame() {
-            state.score = 0;
-            state.lives = 3;
-            state.level = 1;
-            state.gameOver = false;
-            gameOverScreen.style.display = 'none';
-            initLevel();
-        }
-
-        // Level initializer
-        function initLevel() {
-            switch(state.level) {
-                case 1: initLevel1(); break;
-                case 2: initLevel2(); break;
-                // Add more cases for additional levels
-                default: initLevel1();
-            }
-        }
-
-        // Event listeners
-        document.addEventListener('keydown', e => {
-            state.keys[e.key] = true;
-            
-            if (e.key === 'r' && state.gameOver) {
-                restartGame();
-            }
+        window.addEventListener('keydown', (e) => {
+            if (e.key in keysPressed) keysPressed[e.key] = true;
+            if (e.key === ' ' && (gameState === 'start' || gameState === 'gameover')) resetGame();
         });
 
-        document.addEventListener('keyup', e => {
-            state.keys[e.key] = false;
+        window.addEventListener('keyup', (e) => {
+            if (e.key in keysPressed) keysPressed[e.key] = false;
         });
 
-        // Start game
-        initLevel();
-        setInterval(() => {
-            update();
-            draw();
-        }, 16);
+        function resetGame() {
+            player1Score = 0;
+            player2Score = 0;
+            paddleLeft.y = 250;
+            paddleRight.y = 250;
+            resetBall();
+            gameState = 'playing';
+        }
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.velocityX = 0;
+            ball.velocityY = 0;
+            countdown = 3;
+        }
+
+        function playSound(frequency, duration) {
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+            oscillator.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        function update(delta) {
+            if (gameState !== 'playing') return;
+            if (keysPressed.w) paddleLeft.y = Math.max(0, paddleLeft.y - paddleLeft.speed * delta);
+            if (keysPressed.s) paddleLeft.y = Math.min(canvas.height - paddleLeft.height, paddleLeft.y + paddleLeft.speed * delta);
+            if (keysPressed.ArrowUp) paddleRight.y = Math.max(0, paddleRight.y - paddleRight.speed * delta);
+            if (keysPressed.ArrowDown) paddleRight.y = Math.min(canvas.height - paddleRight.height, paddleRight.y + paddleRight.speed * delta);
+            if (countdown > 0) {
+                countdown -= delta;
+                if (countdown <= 0) {
+                    ball.velocityX = (lastScorer === 'player1' ? 300 : -300);
+                    ball.velocityY = (Math.random() - 0.5) * 200;
+                }
+                return;
+            }
+            ball.x += ball.velocityX * delta;
+            ball.y += ball.velocityY * delta;
+            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                ball.velocityY = -ball.velocityY;
+                playSound(440, 0.1);
+            }
+            if (ball.x - ball.radius < paddleLeft.x + paddleLeft.width &&
+                ball.y > paddleLeft.y && ball.y < paddleLeft.y + paddleLeft.height) {
+                const hitPos = (ball.y - paddleLeft.y) / paddleLeft.height;
+                ball.velocityY = (hitPos - 0.5) * 2 * 300;
+                ball.velocityX = -ball.velocityX;
+                playSound(440, 0.1);
+            }
+            if (ball.x + ball.radius > paddleRight.x &&
+                ball.y > paddleRight.y && ball.y < paddleRight.y + paddleRight.height) {
+                const hitPos = (ball.y - paddleRight.y) / paddleRight.height;
+                ball.velocityY = (hitPos - 0.5) * 2 * 300;
+                ball.velocityX = -ball.velocityX;
+                playSound(440, 0.1);
+            }
+            if (ball.x < 0) {
+                player2Score++;
+                lastScorer = 'player2';
+                playSound(220, 0.2);
+                resetBall();
+            } else if (ball.x > canvas.width) {
+                player1Score++;
+                lastScorer = 'player1';
+                playSound(220, 0.2);
+                resetBall();
+            }
+            if (player1Score >= 5 || player2Score >= 5) gameState = 'gameover';
+        }
+
+        function render() {
+            context.fillStyle = 'black';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = 'white';
+            context.font = '40px Arial';
+            context.textAlign = 'center';
+            if (gameState === 'start') {
+                context.fillText('Press Space to Start', canvas.width / 2, canvas.height / 2);
+            } else if (gameState === 'gameover') {
+                context.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 40);
+                context.fillText(`Player ${player1Score > player2Score ? 1 : 2} Wins!`, canvas.width / 2, canvas.height / 2);
+                context.fillText('Press Space to Restart', canvas.width / 2, canvas.height / 2 + 40);
+            } else {
+                for (let y = 10; y < canvas.height; y += 40) context.fillRect(395, y, 10, 20);
+                context.fillRect(paddleLeft.x, paddleLeft.y, paddleLeft.width, paddleLeft.height);
+                context.fillRect(paddleRight.x, paddleRight.y, paddleRight.width, paddleRight.height);
+                context.beginPath();
+                context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                context.fill();
+                context.fillText(player1Score, canvas.width / 4, 50);
+                context.fillText(player2Score, 3 * canvas.width / 4, 50);
+                if (countdown > 0) context.fillText(Math.ceil(countdown), canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const delta = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+            update(delta);
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        resetGame();
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
