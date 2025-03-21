@@ -3,238 +3,137 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic-Tac-Toe with AI</title>
+    <title>Pong vs AI</title>
     <style>
-        /* Center the game elements and set a clean font */
         body {
-            text-align: center;
-            font-family: Arial, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #000;
         }
-        /* Style the controls and status display */
-        #controls, #status {
-            margin: 10px;
-        }
-        /* Style the game board */
-        #board {
-            margin: 20px auto;
-            border-collapse: collapse;
-        }
-        #board td {
-            width: 100px;
-            height: 100px;
-            border: 2px solid black;
-            text-align: center;
-            vertical-align: middle;
-            font-size: 48px;
-            cursor: pointer;
-        }
-        /* Hide the play again button initially */
-        #playAgain {
-            display: none;
-            margin-top: 20px;
+        canvas {
+            border: 2px solid #fff;
         }
     </style>
 </head>
 <body>
-    <h1>Tic-Tac-Toe with AI</h1>
-    <!-- Game controls for difficulty and starting choice -->
-    <div id="controls">
-        <label>Difficulty:</label>
-        <input type="radio" name="difficulty" value="easy" checked> Easy
-        <input type="radio" name="difficulty" value="medium"> Medium
-        <input type="radio" name="difficulty" value="hard"> Hard
-        <br>
-        <button id="startX">Start as X</button>
-        <button id="startO">Start as O</button>
-    </div>
-    <!-- 3x3 game board -->
-    <table id="board">
-        <tr><td></td><td></td><td></td></tr>
-        <tr><td></td><td></td><td></td></tr>
-        <tr><td></td><td></td><td></td></tr>
-    </table>
-    <!-- Status display for game messages -->
-    <div id="status"></div>
-    <!-- Button to restart the game -->
-    <button id="playAgain">Play Again</button>
-
+    <canvas id="pongCanvas" width="800" height="600"></canvas>
     <script>
-        // Select DOM elements
-        const cells = document.querySelectorAll('#board td');
-        const startXButton = document.getElementById('startX');
-        const startOButton = document.getElementById('startO');
-        const playAgainButton = document.getElementById('playAgain');
-        const statusDiv = document.getElementById('status');
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
 
-        // Initialize game variables
-        let board = Array(9).fill(null); // 9-cell board, null means empty
-        let currentPlayer = 'X'; // Tracks whose turn it is
-        let aiSymbol = 'O'; // AI's symbol
-        let playerSymbol = 'X'; // Player's symbol
-        let difficulty = 'easy'; // Default difficulty
-        let gameState = 'choosing'; // Game state: 'choosing', 'playing', 'over'
+        // Paddle properties
+        const paddleHeight = 100;
+        const paddleWidth = 10;
+        const playerPaddle = {
+            x: 50,
+            y: canvas.height / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            color: 'white',
+            dy: 0
+        };
+        const aiPaddle = {
+            x: canvas.width - 50 - paddleWidth,
+            y: canvas.height / 2 - paddleHeight / 2,
+            width: paddleWidth,
+            height: paddleHeight,
+            color: 'white',
+            dy: 0
+        };
 
-        // Add event listeners
-        cells.forEach((cell, index) => {
-            cell.addEventListener('click', () => handlePlayerMove(index));
+        // Ball properties
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            color: 'white',
+            dx: 4,
+            dy: 4
+        };
+
+        // Key events
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowUp') playerPaddle.dy = -5;
+            if (e.code === 'ArrowDown') playerPaddle.dy = 5;
         });
-        startXButton.addEventListener('click', () => startGame('X'));
-        startOButton.addEventListener('click', () => startGame('O'));
-        playAgainButton.addEventListener('click', () => startGame(playerSymbol));
 
-        // Start a new game with the player's chosen symbol
-        function startGame(player) {
-            playerSymbol = player;
-            aiSymbol = player === 'X' ? 'O' : 'X';
-            currentPlayer = 'X'; // X always starts first
-            board = Array(9).fill(null); // Reset board
-            renderBoard();
-            gameState = 'playing';
-            statusDiv.textContent = playerSymbol === currentPlayer ? "Your turn" : "AI's turn";
-            // If AI starts, make its move after a short delay
-            if (playerSymbol !== currentPlayer) {
-                setTimeout(aiMove, 500);
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowUp' || e.code === 'ArrowDown') playerPaddle.dy = 0;
+        });
+
+        function update() {
+            // Move player paddle
+            playerPaddle.y += playerPaddle.dy;
+            if (playerPaddle.y < 0) playerPaddle.y = 0;
+            if (playerPaddle.y + playerPaddle.height > canvas.height) playerPaddle.y = canvas.height - playerPaddle.height;
+
+            // Move AI paddle
+            aiPaddle.y += (ball.y - (aiPaddle.y + aiPaddle.height / 2)) * 0.1;
+            if (aiPaddle.y < 0) aiPaddle.y = 0;
+            if (aiPaddle.y + aiPaddle.height > canvas.height) aiPaddle.y = canvas.height - aiPaddle.height;
+
+            // Move ball
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+
+            // Ball collision with top and bottom walls
+            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
+                ball.dy = -ball.dy;
             }
-            playAgainButton.style.display = 'none';
-            // Get selected difficulty
-            difficulty = document.querySelector('input[name="difficulty"]:checked').value;
-        }
 
-        // Update the board display
-        function renderBoard() {
-            cells.forEach((cell, index) => {
-                cell.textContent = board[index] || '';
-            });
-        }
+            // Ball collision with paddles
+            if (ball.x - ball.radius < playerPaddle.x + playerPaddle.width &&
+                ball.y > playerPaddle.y &&
+                ball.y < playerPaddle.y + playerPaddle.height) {
+                ball.dx = -ball.dx;
+            }
 
-        // Handle player's move
-        function handlePlayerMove(index) {
-            // Check if move is valid
-            if (gameState !== 'playing' || currentPlayer !== playerSymbol || board[index]) return;
-            board[index] = playerSymbol;
-            renderBoard();
-            // Check for win or draw
-            if (checkWin(board, playerSymbol)) {
-                statusDiv.textContent = "You win!";
-                gameState = 'over';
-                playAgainButton.style.display = 'block';
-            } else if (isBoardFull(board)) {
-                statusDiv.textContent = "It's a draw!";
-                gameState = 'over';
-                playAgainButton.style.display = 'block';
-            } else {
-                // Switch to AI's turn
-                currentPlayer = aiSymbol;
-                statusDiv.textContent = "AI's turn";
-                setTimeout(aiMove, 500); // Delay AI move for realism
+            if (ball.x + ball.radius > aiPaddle.x &&
+                ball.y > aiPaddle.y &&
+                ball.y < aiPaddle.y + aiPaddle.height) {
+                ball.dx = -ball.dx;
+            }
+
+            // Ball out of bounds
+            if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
+                resetBall();
             }
         }
 
-        // AI makes its move based on difficulty
-        function aiMove() {
-            let move;
-            if (difficulty === 'easy') {
-                move = getRandomMove();
-            } else if (difficulty === 'medium') {
-                move = Math.random() < 0.5 ? getBestMove() : getRandomMove();
-            } else { // hard
-                move = getBestMove();
-            }
-            board[move] = aiSymbol;
-            renderBoard();
-            // Check for win or draw
-            if (checkWin(board, aiSymbol)) {
-                statusDiv.textContent = "AI wins!";
-                gameState = 'over';
-                playAgainButton.style.display = 'block';
-            } else if (isBoardFull(board)) {
-                statusDiv.textContent = "It's a draw!";
-                gameState = 'over';
-                playAgainButton.style.display = 'block';
-            } else {
-                // Switch back to player's turn
-                currentPlayer = playerSymbol;
-                statusDiv.textContent = "Your turn";
-            }
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw paddles
+            ctx.fillStyle = playerPaddle.color;
+            ctx.fillRect(playerPaddle.x, playerPaddle.y, playerPaddle.width, playerPaddle.height);
+            ctx.fillStyle = aiPaddle.color;
+            ctx.fillRect(aiPaddle.x, aiPaddle.y, aiPaddle.width, aiPaddle.height);
+
+            // Draw ball
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fillStyle = ball.color;
+            ctx.fill();
+            ctx.closePath();
         }
 
-        // Get a random empty cell for easy mode or medium mode fallback
-        function getRandomMove() {
-            const emptyCells = board.map((val, index) => val === null ? index : null)
-                                  .filter(val => val !== null);
-            return emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            ball.dx = -ball.dx;
         }
 
-        // Get the best move using minimax for medium (sometimes) and hard mode
-        function getBestMove() {
-            let bestScore = -Infinity;
-            let move;
-            for (let i = 0; i < 9; i++) {
-                if (board[i] === null) {
-                    board[i] = aiSymbol;
-                    let score = minimax(board, 0, false, -Infinity, Infinity);
-                    board[i] = null;
-                    if (score > bestScore) {
-                        bestScore = score;
-                        move = i;
-                    }
-                }
-            }
-            return move;
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
         }
 
-        // Minimax algorithm with alpha-beta pruning
-        function minimax(board, depth, isMaximizing, alpha, beta) {
-            // Base cases: game over
-            if (checkWin(board, aiSymbol)) return 10 - depth; // AI wins
-            if (checkWin(board, playerSymbol)) return depth - 10; // Player wins
-            if (isBoardFull(board)) return 0; // Draw
-
-            if (isMaximizing) { // AI's turn
-                let bestScore = -Infinity;
-                for (let i = 0; i < 9; i++) {
-                    if (board[i] === null) {
-                        board[i] = aiSymbol;
-                        let score = minimax(board, depth + 1, false, alpha, beta);
-                        board[i] = null;
-                        bestScore = Math.max(score, bestScore);
-                        alpha = Math.max(alpha, score);
-                        if (beta <= alpha) break; // Prune
-                    }
-                }
-                return bestScore;
-            } else { // Player's turn
-                let bestScore = Infinity;
-                for (let i = 0; i < 9; i++) {
-                    if (board[i] === null) {
-                        board[i] = playerSymbol;
-                        let score = minimax(board, depth + 1, true, alpha, beta);
-                        board[i] = null;
-                        bestScore = Math.min(score, bestScore);
-                        beta = Math.min(beta, score);
-                        if (beta <= alpha) break; // Prune
-                    }
-                }
-                return bestScore;
-            }
-        }
-
-        // Define winning combinations
-        const winningCombos = [
-            [0,1,2], [3,4,5], [6,7,8], // Rows
-            [0,3,6], [1,4,7], [2,5,8], // Columns
-            [0,4,8], [2,4,6]           // Diagonals
-        ];
-
-        // Check if a player has won
-        function checkWin(board, player) {
-            return winningCombos.some(combo => combo.every(index => board[index] === player));
-        }
-
-        // Check if the board is full (draw)
-        function isBoardFull(board) {
-            return board.every(cell => cell !== null);
-        }
+        gameLoop();
     </script>
 </body>
 </html>
