@@ -3,143 +3,238 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pong Game</title>
+    <title>Tic-Tac-Toe with AI</title>
+    <style>
+        /* Center the game elements and set a clean font */
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        /* Style the controls and status display */
+        #controls, #status {
+            margin: 10px;
+        }
+        /* Style the game board */
+        #board {
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+        #board td {
+            width: 100px;
+            height: 100px;
+            border: 2px solid black;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 48px;
+            cursor: pointer;
+        }
+        /* Hide the play again button initially */
+        #playAgain {
+            display: none;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="canvas" width="800" height="600"></canvas>
+    <h1>Tic-Tac-Toe with AI</h1>
+    <!-- Game controls for difficulty and starting choice -->
+    <div id="controls">
+        <label>Difficulty:</label>
+        <input type="radio" name="difficulty" value="easy" checked> Easy
+        <input type="radio" name="difficulty" value="medium"> Medium
+        <input type="radio" name="difficulty" value="hard"> Hard
+        <br>
+        <button id="startX">Start as X</button>
+        <button id="startO">Start as O</button>
+    </div>
+    <!-- 3x3 game board -->
+    <table id="board">
+        <tr><td></td><td></td><td></td></tr>
+        <tr><td></td><td></td><td></td></tr>
+        <tr><td></td><td></td><td></td></tr>
+    </table>
+    <!-- Status display for game messages -->
+    <div id="status"></div>
+    <!-- Button to restart the game -->
+    <button id="playAgain">Play Again</button>
+
     <script>
-        const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
-        const paddleLeft = { x: 50, y: 250, width: 20, height: 100, speed: 300 };
-        const paddleRight = { x: 730, y: 250, width: 20, height: 100, speed: 300 };
-        const ball = { x: 400, y: 300, radius: 10, velocityX: 0, velocityY: 0 };
-        let player1Score = 0;
-        let player2Score = 0;
-        let gameState = 'start';
-        let countdown = 0;
-        let lastScorer = 'player1';
-        const keysPressed = { w: false, s: false, ArrowUp: false, ArrowDown: false };
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Select DOM elements
+        const cells = document.querySelectorAll('#board td');
+        const startXButton = document.getElementById('startX');
+        const startOButton = document.getElementById('startO');
+        const playAgainButton = document.getElementById('playAgain');
+        const statusDiv = document.getElementById('status');
 
-        window.addEventListener('keydown', (e) => {
-            if (e.key in keysPressed) keysPressed[e.key] = true;
-            if (e.key === ' ' && (gameState === 'start' || gameState === 'gameover')) resetGame();
+        // Initialize game variables
+        let board = Array(9).fill(null); // 9-cell board, null means empty
+        let currentPlayer = 'X'; // Tracks whose turn it is
+        let aiSymbol = 'O'; // AI's symbol
+        let playerSymbol = 'X'; // Player's symbol
+        let difficulty = 'easy'; // Default difficulty
+        let gameState = 'choosing'; // Game state: 'choosing', 'playing', 'over'
+
+        // Add event listeners
+        cells.forEach((cell, index) => {
+            cell.addEventListener('click', () => handlePlayerMove(index));
         });
+        startXButton.addEventListener('click', () => startGame('X'));
+        startOButton.addEventListener('click', () => startGame('O'));
+        playAgainButton.addEventListener('click', () => startGame(playerSymbol));
 
-        window.addEventListener('keyup', (e) => {
-            if (e.key in keysPressed) keysPressed[e.key] = false;
-        });
-
-        function resetGame() {
-            player1Score = 0;
-            player2Score = 0;
-            paddleLeft.y = 250;
-            paddleRight.y = 250;
-            resetBall();
+        // Start a new game with the player's chosen symbol
+        function startGame(player) {
+            playerSymbol = player;
+            aiSymbol = player === 'X' ? 'O' : 'X';
+            currentPlayer = 'X'; // X always starts first
+            board = Array(9).fill(null); // Reset board
+            renderBoard();
             gameState = 'playing';
+            statusDiv.textContent = playerSymbol === currentPlayer ? "Your turn" : "AI's turn";
+            // If AI starts, make its move after a short delay
+            if (playerSymbol !== currentPlayer) {
+                setTimeout(aiMove, 500);
+            }
+            playAgainButton.style.display = 'none';
+            // Get selected difficulty
+            difficulty = document.querySelector('input[name="difficulty"]:checked').value;
         }
 
-        function resetBall() {
-            ball.x = canvas.width / 2;
-            ball.y = canvas.height / 2;
-            ball.velocityX = 0;
-            ball.velocityY = 0;
-            countdown = 3;
+        // Update the board display
+        function renderBoard() {
+            cells.forEach((cell, index) => {
+                cell.textContent = board[index] || '';
+            });
         }
 
-        function playSound(frequency, duration) {
-            const oscillator = audioCtx.createOscillator();
-            oscillator.type = 'square';
-            oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
-            oscillator.connect(audioCtx.destination);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + duration);
-        }
-
-        function update(delta) {
-            if (gameState !== 'playing') return;
-            if (keysPressed.w) paddleLeft.y = Math.max(0, paddleLeft.y - paddleLeft.speed * delta);
-            if (keysPressed.s) paddleLeft.y = Math.min(canvas.height - paddleLeft.height, paddleLeft.y + paddleLeft.speed * delta);
-            if (keysPressed.ArrowUp) paddleRight.y = Math.max(0, paddleRight.y - paddleRight.speed * delta);
-            if (keysPressed.ArrowDown) paddleRight.y = Math.min(canvas.height - paddleRight.height, paddleRight.y + paddleRight.speed * delta);
-            if (countdown > 0) {
-                countdown -= delta;
-                if (countdown <= 0) {
-                    ball.velocityX = (lastScorer === 'player1' ? 300 : -300);
-                    ball.velocityY = (Math.random() - 0.5) * 200;
-                }
-                return;
-            }
-            ball.x += ball.velocityX * delta;
-            ball.y += ball.velocityY * delta;
-            if (ball.y - ball.radius < 0 || ball.y + ball.radius > canvas.height) {
-                ball.velocityY = -ball.velocityY;
-                playSound(440, 0.1);
-            }
-            if (ball.x - ball.radius < paddleLeft.x + paddleLeft.width &&
-                ball.y > paddleLeft.y && ball.y < paddleLeft.y + paddleLeft.height) {
-                const hitPos = (ball.y - paddleLeft.y) / paddleLeft.height;
-                ball.velocityY = (hitPos - 0.5) * 2 * 300;
-                ball.velocityX = -ball.velocityX;
-                playSound(440, 0.1);
-            }
-            if (ball.x + ball.radius > paddleRight.x &&
-                ball.y > paddleRight.y && ball.y < paddleRight.y + paddleRight.height) {
-                const hitPos = (ball.y - paddleRight.y) / paddleRight.height;
-                ball.velocityY = (hitPos - 0.5) * 2 * 300;
-                ball.velocityX = -ball.velocityX;
-                playSound(440, 0.1);
-            }
-            if (ball.x < 0) {
-                player2Score++;
-                lastScorer = 'player2';
-                playSound(220, 0.2);
-                resetBall();
-            } else if (ball.x > canvas.width) {
-                player1Score++;
-                lastScorer = 'player1';
-                playSound(220, 0.2);
-                resetBall();
-            }
-            if (player1Score >= 5 || player2Score >= 5) gameState = 'gameover';
-        }
-
-        function render() {
-            context.fillStyle = 'black';
-            context.fillRect(0, 0, canvas.width, canvas.height);
-            context.fillStyle = 'white';
-            context.font = '40px Arial';
-            context.textAlign = 'center';
-            if (gameState === 'start') {
-                context.fillText('Press Space to Start', canvas.width / 2, canvas.height / 2);
-            } else if (gameState === 'gameover') {
-                context.fillText('Game Over', canvas.width / 2, canvas.height / 2 - 40);
-                context.fillText(`Player ${player1Score > player2Score ? 1 : 2} Wins!`, canvas.width / 2, canvas.height / 2);
-                context.fillText('Press Space to Restart', canvas.width / 2, canvas.height / 2 + 40);
+        // Handle player's move
+        function handlePlayerMove(index) {
+            // Check if move is valid
+            if (gameState !== 'playing' || currentPlayer !== playerSymbol || board[index]) return;
+            board[index] = playerSymbol;
+            renderBoard();
+            // Check for win or draw
+            if (checkWin(board, playerSymbol)) {
+                statusDiv.textContent = "You win!";
+                gameState = 'over';
+                playAgainButton.style.display = 'block';
+            } else if (isBoardFull(board)) {
+                statusDiv.textContent = "It's a draw!";
+                gameState = 'over';
+                playAgainButton.style.display = 'block';
             } else {
-                for (let y = 10; y < canvas.height; y += 40) context.fillRect(395, y, 10, 20);
-                context.fillRect(paddleLeft.x, paddleLeft.y, paddleLeft.width, paddleLeft.height);
-                context.fillRect(paddleRight.x, paddleRight.y, paddleRight.width, paddleRight.height);
-                context.beginPath();
-                context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-                context.fill();
-                context.fillText(player1Score, canvas.width / 4, 50);
-                context.fillText(player2Score, 3 * canvas.width / 4, 50);
-                if (countdown > 0) context.fillText(Math.ceil(countdown), canvas.width / 2, canvas.height / 2);
+                // Switch to AI's turn
+                currentPlayer = aiSymbol;
+                statusDiv.textContent = "AI's turn";
+                setTimeout(aiMove, 500); // Delay AI move for realism
             }
         }
 
-        let lastTime = 0;
-        function gameLoop(timestamp) {
-            const delta = (timestamp - lastTime) / 1000;
-            lastTime = timestamp;
-            update(delta);
-            render();
-            requestAnimationFrame(gameLoop);
+        // AI makes its move based on difficulty
+        function aiMove() {
+            let move;
+            if (difficulty === 'easy') {
+                move = getRandomMove();
+            } else if (difficulty === 'medium') {
+                move = Math.random() < 0.5 ? getBestMove() : getRandomMove();
+            } else { // hard
+                move = getBestMove();
+            }
+            board[move] = aiSymbol;
+            renderBoard();
+            // Check for win or draw
+            if (checkWin(board, aiSymbol)) {
+                statusDiv.textContent = "AI wins!";
+                gameState = 'over';
+                playAgainButton.style.display = 'block';
+            } else if (isBoardFull(board)) {
+                statusDiv.textContent = "It's a draw!";
+                gameState = 'over';
+                playAgainButton.style.display = 'block';
+            } else {
+                // Switch back to player's turn
+                currentPlayer = playerSymbol;
+                statusDiv.textContent = "Your turn";
+            }
         }
 
-        resetGame();
-        requestAnimationFrame(gameLoop);
+        // Get a random empty cell for easy mode or medium mode fallback
+        function getRandomMove() {
+            const emptyCells = board.map((val, index) => val === null ? index : null)
+                                  .filter(val => val !== null);
+            return emptyCells[Math.floor(Math.random() * emptyCells.length)];
+        }
+
+        // Get the best move using minimax for medium (sometimes) and hard mode
+        function getBestMove() {
+            let bestScore = -Infinity;
+            let move;
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === null) {
+                    board[i] = aiSymbol;
+                    let score = minimax(board, 0, false, -Infinity, Infinity);
+                    board[i] = null;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        move = i;
+                    }
+                }
+            }
+            return move;
+        }
+
+        // Minimax algorithm with alpha-beta pruning
+        function minimax(board, depth, isMaximizing, alpha, beta) {
+            // Base cases: game over
+            if (checkWin(board, aiSymbol)) return 10 - depth; // AI wins
+            if (checkWin(board, playerSymbol)) return depth - 10; // Player wins
+            if (isBoardFull(board)) return 0; // Draw
+
+            if (isMaximizing) { // AI's turn
+                let bestScore = -Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === null) {
+                        board[i] = aiSymbol;
+                        let score = minimax(board, depth + 1, false, alpha, beta);
+                        board[i] = null;
+                        bestScore = Math.max(score, bestScore);
+                        alpha = Math.max(alpha, score);
+                        if (beta <= alpha) break; // Prune
+                    }
+                }
+                return bestScore;
+            } else { // Player's turn
+                let bestScore = Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === null) {
+                        board[i] = playerSymbol;
+                        let score = minimax(board, depth + 1, true, alpha, beta);
+                        board[i] = null;
+                        bestScore = Math.min(score, bestScore);
+                        beta = Math.min(beta, score);
+                        if (beta <= alpha) break; // Prune
+                    }
+                }
+                return bestScore;
+            }
+        }
+
+        // Define winning combinations
+        const winningCombos = [
+            [0,1,2], [3,4,5], [6,7,8], // Rows
+            [0,3,6], [1,4,7], [2,5,8], // Columns
+            [0,4,8], [2,4,6]           // Diagonals
+        ];
+
+        // Check if a player has won
+        function checkWin(board, player) {
+            return winningCombos.some(combo => combo.every(index => board[index] === player));
+        }
+
+        // Check if the board is full (draw)
+        function isBoardFull(board) {
+            return board.every(cell => cell !== null);
+        }
     </script>
 </body>
 </html>
