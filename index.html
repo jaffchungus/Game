@@ -1,198 +1,225 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Realistic Driving Game</title>
+    <title>Retro Platformer</title>
     <style>
-        body { margin: 0; overflow: hidden; }
-        #canvas { width: 100%; height: 100%; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial; }
-        #menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; display: none; }
+        body { margin: 0; padding: 0; overflow: hidden; background: #000; color: #fff; font-family: 'Press Start 2P', cursive; }
+        #game-container { position: relative; width: 800px; height: 600px; margin: 0 auto; background: #1a1a1a; }
+        .block { position: absolute; background: #4a4a4a; }
+        .player { width: 40px; height: 40px; background: #00ff00; border-radius: 50%; }
+        .enemy { width: 30px; height: 30px; background: #ff0000; border-radius: 50%; }
+        .coin { width: 20px; height: 20px; background: #ffff00; border-radius: 50%; }
+        .hud { position: absolute; top: 10px; left: 10px; font-size: 18px; }
+        .game-over { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 36px; display: none; }
     </style>
 </head>
 <body>
-    <!-- UI Elements -->
-    <div id="ui">
-        <div id="score">Score: 0</div>
-        <div id="speedometer">Speed: 0</div>
-        <div id="notification"></div>
-    </div>
-    <div id="menu">
-        <h2>Select Car</h2>
-        <div id="car-list"></div>
+    <div id="game-container">
+        <div class="hud" id="hud">Score: 0 | Lives: 3</div>
+        <div class="game-over" id="gameOver">GAME OVER<br>Press R to Restart</div>
     </div>
 
-    <!-- Three.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
     <script>
-        // Constants
-        const MAX_SPEED = 1.0;
-        const ACCELERATION = 0.005;
-        const FRICTION = 0.002;
-        const TURN_SPEED = 0.01;
+        const gameContainer = document.getElementById('game-container');
+        const hud = document.getElementById('hud');
+        const gameOverScreen = document.getElementById('gameOver');
 
-        // Input State
-        const keys = { up: false, down: false, left: false, right: false };
+        const GRAVITY = 0.5;
+        const MOVE_SPEED = 5;
+        const JUMP_POWER = -12;
 
-        // Game Class
-        class Game {
-            constructor() {
-                this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                this.renderer = new THREE.WebGLRenderer({ antialias: true });
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                document.body.appendChild(this.renderer.domElement);
+        let player = {
+            x: 50,
+            y: 510, // Fixed initial position to sit on platform [[6]][[8]]
+            width: 40,
+            height: 40,
+            velY: 0,
+            onGround: false,
+            canJump: true
+        };
 
-                this.car = new Car('sedan');
-                this.environment = new Environment();
-                this.ui = new UI();
-                this.sound = new SoundManager();
-                this.achievements = new AchievementManager();
+        let keys = {};
+        let score = 0;
+        let lives = 3;
+        let gameLoop;
+        let level = 1;
+        let platforms = [];
+        let enemies = [];
+        let coins = [];
 
-                this.score = 0;
-                this.distance = 0;
-                this.paused = false;
+        function initLevel1() {
+            platforms = [
+                { x: 0, y: 550, width: 800, height: 50 }, // Main floor
+                { x: 200, y: 450, width: 200, height: 20 },
+                { x: 500, y: 350, width: 150, height: 20 }
+            ];
 
-                this.scene.add(this.car.model);
-                this.camera.position.set(0, 5, 10);
-                this.camera.lookAt(this.car.model.position);
+            enemies = [
+                { x: 300, y: 520, width: 30, height: 30, direction: 1, speed: 2 }
+            ];
 
-                window.addEventListener('keydown', (e) => this.handleKey(e, true));
-                window.addEventListener('keyup', (e) => this.handleKey(e, false));
-            }
-            handleKey(e, state) {
-                if (e.key === 'ArrowUp') keys.up = state;
-                if (e.key === 'ArrowDown') keys.down = state;
-                if (e.key === 'ArrowLeft') keys.left = state;
-                if (e.key === 'ArrowRight') keys.right = state;
-                if (e.key === 'p' && !state) this.togglePause();
-            }
-            togglePause() {
-                this.paused = !this.paused;
-                document.getElementById('menu').style.display = this.paused ? 'block' : 'none';
-            }
-            update(delta) {
-                if (!this.paused) {
-                    this.car.update(delta);
-                    this.environment.update();
-                    this.achievements.checkAchievements(this);
-                    this.score += this.car.speed * delta * 0.01;
-                    this.distance += this.car.speed * delta * 0.001;
-                    this.ui.update(this.score, this.car.speed);
-                    this.camera.position.set(this.car.model.position.x, 5, this.car.model.position.z + 10);
-                    this.camera.lookAt(this.car.model.position);
-                }
-            }
-            render() {
-                this.renderer.render(this.scene, this.camera);
-            }
+            coins = [
+                { x: 250, y: 410, collected: false },
+                { x: 550, y: 310, collected: false }
+            ];
         }
 
-        // Car Class
-        class Car {
-            constructor(type) {
-                this.type = type;
-                this.speed = 0;
-                this.rotation = 0;
-                this.model = this.buildCar();
-                this.stats = { speed: 0.8, accel: 0.005, durability: 1 }; // Vary by type
-            }
-            buildCar() {
-                const group = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshPhongMaterial({ color: 0x00ff00 }));
-                const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32), new THREE.MeshPhongMaterial({ color: 0x000000 }));
-                wheel.position.set(1, -0.5, 1); // One wheel (repeat for others)
-                group.add(body, wheel);
-                return group;
-            }
-            update(delta) {
-                if (keys.up) this.speed += this.stats.accel * delta;
-                if (keys.down) this.speed -= FRICTION * delta;
-                if (keys.left) this.rotation += TURN_SPEED * delta;
-                if (keys.right) this.rotation -= TURN_SPEED * delta;
-                this.speed = Math.max(0, Math.min(this.speed, this.stats.speed));
-                this.model.position.x += Math.sin(this.rotation) * this.speed * delta;
-                this.model.position.z += Math.cos(this.rotation) * this.speed * delta;
-                this.model.rotation.y = this.rotation;
-            }
-        }
+        function update() {
+            // Player movement
+            if (keys['ArrowRight']) player.x += MOVE_SPEED;
+            if (keys['ArrowLeft']) player.x -= MOVE_SPEED;
+            
+            // Gravity system [[7]]
+            player.velY += GRAVITY;
+            player.y += player.velY;
+            player.onGround = false;
 
-        // Environment Class
-        class Environment {
-            constructor() {
-                const road = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({ color: 0x333333 }));
-                road.rotation.x = -Math.PI / 2;
-                game.scene.add(road);
-                // Add buildings, traffic, etc.
-            }
-            update() {
-                // Update dynamic elements
-            }
-        }
-
-        // UI Class
-        class UI {
-            update(score, speed) {
-                document.getElementById('score').textContent = `Score: ${Math.floor(score)}`;
-                document.getElementById('speedometer').textContent = `Speed: ${Math.floor(speed * 100)}`;
-            }
-            showNotification(message) {
-                const notif = document.getElementById('notification');
-                notif.textContent = message;
-                setTimeout(() => notif.textContent = '', 3000);
-            }
-        }
-
-        // Sound Manager Class
-        class SoundManager {
-            constructor() {
-                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                this.engine = this.audioCtx.createOscillator();
-                this.engine.type = 'sawtooth';
-                this.engine.connect(this.audioCtx.destination);
-                this.engine.start();
-            }
-            update(speed) {
-                this.engine.frequency.setValueAtTime(100 + speed * 200, this.audioCtx.currentTime);
-            }
-        }
-
-        // Achievement Manager Class
-        class AchievementManager {
-            constructor() {
-                this.unlockedCars = ['sedan'];
-                this.achievements = [
-                    { name: "Speed Demon", condition: (g) => g.car.speed > 0.8, reward: () => this.unlockCar('sports'), done: false },
-                    { name: "Endurance", condition: (g) => g.distance > 10, reward: () => this.unlockCar('suv'), done: false }
-                ];
-            }
-            checkAchievements(game) {
-                this.achievements.forEach(a => {
-                    if (!a.done && a.condition(game)) {
-                        a.reward();
-                        a.done = true;
-                        game.ui.showNotification(`Achievement Unlocked: ${a.name}`);
+            // Platform collision detection [[6]]
+            platforms.forEach(platform => {
+                if (player.x < platform.x + platform.width &&
+                    player.x + player.width > platform.x &&
+                    player.y + player.height > platform.y &&
+                    player.y < platform.y + platform.height) {
+                    
+                    if (player.velY > 0 && player.y < platform.y) {
+                        player.y = platform.y - player.height;
+                        player.velY = 0;
+                        player.onGround = true;
+                        player.canJump = true;
                     }
-                });
+                }
+            });
+
+            // Jump mechanics
+            if (keys['Space'] && player.canJump && player.onGround) {
+                player.velY = JUMP_POWER;
+                player.canJump = false;
             }
-            unlockCar(type) {
-                this.unlockedCars.push(type);
-                // Update car selection menu
+
+            // Enemy AI and collision
+            enemies.forEach(enemy => {
+                enemy.x += enemy.speed * enemy.direction;
+                if (enemy.x + enemy.width > 800 || enemy.x < 0) enemy.direction *= -1;
+
+                if (player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y) {
+                    lives--;
+                    resetPlayer();
+                }
+            });
+
+            // Coin collection
+            coins.forEach(coin => {
+                if (!coin.collected &&
+                    player.x < coin.x + 20 &&
+                    player.x + player.width > coin.x &&
+                    player.y < coin.y + 20 &&
+                    player.y + player.height > coin.y) {
+                    coin.collected = true;
+                    score += 100;
+                }
+            });
+
+            // Boundary checks
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > 800) player.x = 800 - player.width;
+
+            // Level progression
+            if (coins.every(c => c.collected)) {
+                level++;
+                initLevel();
+            }
+
+            // HUD update
+            hud.textContent = `Score: ${score} | Lives: ${lives}`;
+
+            // Game over condition
+            if (lives <= 0) gameOver();
+        }
+
+        function draw() {
+            gameContainer.innerHTML = `<div class="hud">${hud.textContent}</div>`;
+            
+            // Draw platforms
+            platforms.forEach(platform => {
+                const div = document.createElement('div');
+                div.className = 'block';
+                div.style.left = platform.x + 'px';
+                div.style.top = platform.y + 'px';
+                div.style.width = platform.width + 'px';
+                div.style.height = platform.height + 'px';
+                gameContainer.appendChild(div);
+            });
+
+            // Draw player
+            const playerDiv = document.createElement('div');
+            playerDiv.className = 'player';
+            playerDiv.style.left = player.x + 'px';
+            playerDiv.style.top = player.y + 'px';
+            gameContainer.appendChild(playerDiv);
+
+            // Draw enemies
+            enemies.forEach(enemy => {
+                const enemyDiv = document.createElement('div');
+                enemyDiv.className = 'enemy';
+                enemyDiv.style.left = enemy.x + 'px';
+                enemyDiv.style.top = enemy.y + 'px';
+                gameContainer.appendChild(enemyDiv);
+            });
+
+            // Draw coins
+            coins.forEach(coin => {
+                if (!coin.collected) {
+                    const coinDiv = document.createElement('div');
+                    coinDiv.className = 'coin';
+                    coinDiv.style.left = coin.x + 'px';
+                    coinDiv.style.top = coin.y + 'px';
+                    gameContainer.appendChild(coinDiv);
+                }
+            });
+        }
+
+        function gameLoop() { update(); draw(); }
+
+        function resetPlayer() {
+            player.x = 50;
+            player.y = 510; // Match platform height [[8]]
+            player.velY = 0;
+        }
+
+        function gameOver() {
+            clearInterval(gameLoop);
+            gameOverScreen.style.display = 'block';
+        }
+
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            level = 1;
+            gameOverScreen.style.display = 'none';
+            initLevel();
+            gameLoop = setInterval(gameLoop, 16);
+        }
+
+        function initLevel() {
+            switch(level) {
+                case 1: initLevel1(); break;
+                default: alert('You win!'); gameOver();
             }
         }
 
-        // Game Loop
-        let lastTime = 0;
-        const game = new Game();
-        function animate(time) {
-            const delta = time - lastTime;
-            lastTime = time;
-            game.update(delta);
-            game.render();
-            requestAnimationFrame(animate);
-        }
-        animate(0);
+        // Input handling
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === 'r' && lives <= 0) restartGame();
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        // Start game
+        initLevel();
+        gameLoop = setInterval(gameLoop, 16);
     </script>
 </body>
 </html>
