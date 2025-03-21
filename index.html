@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Jumper Game</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid #000;
+        }
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: #333;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">Score: 0</div>
+    <div id="gameOver">Game Over!</div>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverDisplay = document.getElementById('gameOver');
+
+        const player = {
+            x: 50,
+            y: 300,
+            width: 50,
+            height: 50,
+            color: 'blue',
+            dy: 0,
+            gravity: 0.5,
+            jumpStrength: 10,
+            isJumping: false,
+            image: new Image()
+        };
+        player.image.src = 'player.png'; // Replace with the path to your player image
+
+        const obstacles = [];
+        let score = 0;
+        let gameSpeed = 2;
+        let isGameOver = false;
+
+        const obstacleImage = new Image();
+        obstacleImage.src = 'obstacle.png'; // Replace with the path to your obstacle image
+
+        const jumpSound = new Audio('jump.mp3'); // Replace with the path to your jump sound
+        const gameOverSound = new Audio('gameOver.mp3'); // Replace with the path to your game over sound
+
+        function drawPlayer() {
+            if (player.image.complete) {
+                ctx.drawImage(player.image, player.x, player.y, player.width, player.height);
+            } else {
+                ctx.fillStyle = player.color;
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+            }
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                if (obstacleImage.complete) {
+                    ctx.drawImage(obstacleImage, obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                } else {
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                }
+            });
+        }
+
+        function updatePlayer() {
+            player.dy += player.gravity;
+            player.y += player.dy;
+
+            if (player.y + player.height >= canvas.height) {
+                player.y = canvas.height - player.height;
+                player.dy = 0;
+                player.isJumping = false;
+            }
+        }
+
+        function updateObstacles() {
+            obstacles.forEach(obstacle => {
+                obstacle.x -= gameSpeed;
+            });
+
+            obstacles = obstacles.filter(obstacle => obstacle.x + obstacle.width > 0);
+        }
+
+        function generateObstacle() {
+            const height = Math.floor(Math.random() * 200) + 50;
+            const obstacle = {
+                x: canvas.width,
+                y: canvas.height - height,
+                width: 30,
+                height: height
+            };
+            obstacles.push(obstacle);
+        }
+
+        function checkCollision() {
+            obstacles.forEach(obstacle => {
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x + player.width > obstacle.x &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + player.height > obstacle.y) {
+                    isGameOver = true;
+                    gameOverSound.play();
+                    gameOverDisplay.style.display = 'block';
+                }
+            });
+        }
+
+        function updateScore() {
+            score++;
+            if (score % 100 === 0) {
+                gameSpeed += 0.5;
+            }
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+        function gameLoop() {
+            if (isGameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+            drawObstacles();
+            updatePlayer();
+            updateObstacles();
+            checkCollision();
+            updateScore();
+
+            if (Math.random() < 0.01) {
+                generateObstacle();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', event => {
+            if (event.code === 'Space' && !player.isJumping && !isGameOver) {
+                player.dy = -player.jumpStrength;
+                player.isJumping = true;
+                jumpSound.play();
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
